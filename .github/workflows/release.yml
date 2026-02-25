@@ -1,0 +1,92 @@
+name: Build, Bump & Publish
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
+
+permissions:
+  contents: write   # push version bump commit + tag
+  id-token: write   # npm provenance
+
+jobs:
+  release:
+    name: Build → Bump → Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout full history (needed for version bump commit) ─────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Setup Node ────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: "npm"
+
+      # ── 3. Install dependencies ──────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ── 4. Build TypeScript ──────────────────────────────────────────────
+      - name: Build
+        run: npm run build
+
+      # ── 5. Determine bump type from commit message ───────────────────────
+      # Supports:
+      #   feat!:  / BREAKING CHANGE  → major
+      #   feat:                      → minor
+      #   fix: / chore: / else       → patch
+      - name: Determine version bump
+        id: bump
+        run: |
+          MSG="${{ github.event.head_commit.message }}"
+          if echo "$MSG" | grep -qE "^feat!:|BREAKING CHANGE"; then
+            echo "type=major" >> "$GITHUB_OUTPUT"
+          elif echo "$MSG" | grep -qE "^feat(\(.+\))?:"; then
+            echo "type=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── 6. Bump version in package.json ─────────────────────────────────
+      - name: Bump version (${{ steps.bump.outputs.type }})
+        id: version
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm version ${{ steps.bump.outputs.type }} --no-git-tag-version
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # ── 7. Commit version bump + push tag ────────────────────────────────
+      - name: Commit and tag v${{ steps.version.outputs.version }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          git add package.json package-lock.json
+          git commit -m "chore: release v$VERSION [skip ci]"
+          git tag "v$VERSION"
+          git push origin master --follow-tags
+
+      # ── 8. Publish to npm ────────────────────────────────────────────────
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # ── 9. Create GitHub Release ─────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
