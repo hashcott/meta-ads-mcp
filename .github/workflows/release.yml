@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: write   # push version bump commit + tag
-  id-token: write   # npm provenance
 
 jobs:
   release:
@@ -78,8 +77,9 @@ jobs:
           git push origin master --follow-tags
 
       # ── 8. Publish to npm ────────────────────────────────────────────────
+      # Requires an "Automation" type token on npmjs.com (bypasses 2FA in CI)
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
