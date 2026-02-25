@@ -47,10 +47,36 @@ export META_ADS_ACCESS_TOKEN=YOUR_META_ACCESS_TOKEN
 node dist/index.js
 ```
 
+## Using with npx (no install required)
+
+Once published to npm, run directly with:
+
+```bash
+npx meta-ads-mcp-server --access-token YOUR_META_ACCESS_TOKEN
+```
+
 ## Cursor / Claude Desktop Configuration
 
 Add to your MCP client configuration:
 
+**Via npx (recommended — no local install needed):**
+```json
+{
+  "mcpServers": {
+    "meta-ads": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "meta-ads-mcp-server",
+        "--access-token",
+        "YOUR_META_ACCESS_TOKEN"
+      ]
+    }
+  }
+}
+```
+
+**Via local build:**
 ```json
 {
   "mcpServers": {
@@ -66,14 +92,13 @@ Add to your MCP client configuration:
 }
 ```
 
-Or using the environment variable approach:
-
+**Via environment variable:**
 ```json
 {
   "mcpServers": {
     "meta-ads": {
-      "command": "node",
-      "args": ["/path/to/meta-ads-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "meta-ads-mcp-server"],
       "env": {
         "META_ADS_ACCESS_TOKEN": "YOUR_META_ACCESS_TOKEN"
       }
