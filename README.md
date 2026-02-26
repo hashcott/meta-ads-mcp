@@ -1,6 +1,8 @@
 # Meta Ads MCP Server
 
-MCP (Model Context Protocol) server for the Meta (Facebook) Ads API, written in TypeScript. Provides 21 tools to manage and analyze ad accounts, campaigns, ad sets, ads, creatives, insights, and activity logs via the Meta Graph API v22.0.
+MCP (Model Context Protocol) server for the Meta (Facebook) Ads API, written in TypeScript. Provides 24 tools to manage and analyze ad accounts, campaigns, ad sets, ads, creatives, insights, and activity logs via the Meta Graph API v22.0.
+
+Supports both **local stdio** (for Cursor/Claude Desktop) and **remote HTTP** (for Claude.ai custom connectors and other remote MCP clients).
 
 ## Features
 
@@ -19,6 +21,13 @@ MCP (Model Context Protocol) server for the Meta (Facebook) Ads API, written in 
 
 - Node.js >= 18
 - A Meta (Facebook) Access Token with `ads_read` permission
+
+## Transport Modes
+
+| Mode | Use case | How to enable |
+|------|----------|---------------|
+| `stdio` (default) | Cursor, Claude Desktop, local tools | Default — no extra config needed |
+| `http` | Claude.ai remote connectors, multi-client | `TRANSPORT=http` env var |
 
 ## Installation
 
@@ -54,6 +63,50 @@ Once published to npm, run directly with:
 ```bash
 npx meta-ads-mcp-server --access-token YOUR_META_ACCESS_TOKEN
 ```
+
+## Remote HTTP Server
+
+Run as a public HTTP server for use with Claude.ai custom connectors or any remote MCP client:
+
+```bash
+# Start HTTP server on port 3000 (default)
+TRANSPORT=http META_ADS_ACCESS_TOKEN=YOUR_META_ACCESS_TOKEN node dist/index.js
+
+# Custom port
+TRANSPORT=http META_ADS_ACCESS_TOKEN=YOUR_META_ACCESS_TOKEN PORT=8080 node dist/index.js
+```
+
+Endpoints:
+- `POST /mcp` — MCP protocol endpoint (use this as your connector URL)
+- `GET /health` — Health check (`{"status":"ok"}`)
+
+### Claude.ai Custom Connector
+
+1. Go to **Settings > Connectors > Add custom connector**
+2. Set the remote MCP server URL to: `https://your-domain.com/mcp`
+3. Click **Add**
+
+### Expose locally with ngrok (for testing)
+
+```bash
+# Terminal 1 — start the server
+TRANSPORT=http META_ADS_ACCESS_TOKEN=YOUR_TOKEN PORT=8080 node dist/index.js
+
+# Terminal 2 — expose via ngrok
+ngrok http 8080
+```
+
+Use the ngrok HTTPS URL (e.g. `https://xxxx.ngrok-free.app/mcp`) as your connector URL.
+
+### Deploy to cloud
+
+Set these environment variables on your hosting platform (Railway, Render, Fly.io, etc.):
+
+| Variable | Value |
+|----------|-------|
+| `TRANSPORT` | `http` |
+| `META_ADS_ACCESS_TOKEN` | Your Meta access token |
+| `PORT` | Port assigned by platform (usually automatic) |
 
 ## Cursor / Claude Desktop Configuration
 

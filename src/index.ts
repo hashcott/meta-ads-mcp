@@ -6,13 +6,19 @@
  * analyze ad accounts, campaigns, ad sets, ads, creatives, media assets, insights,
  * and activity logs via the Meta Graph API v22.0.
  *
- * Usage:
+ * Usage (stdio):
  *   node dist/index.js --access-token <YOUR_META_ACCESS_TOKEN>
  *   META_ADS_ACCESS_TOKEN=<token> node dist/index.js
+ *
+ * Usage (remote HTTP):
+ *   TRANSPORT=http META_ADS_ACCESS_TOKEN=<token> node dist/index.js
+ *   TRANSPORT=http META_ADS_ACCESS_TOKEN=<token> PORT=3000 node dist/index.js
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import express from "express";
 import { registerAccountTools } from "./tools/accounts.js";
 import { registerInsightsTools } from "./tools/insights.js";
 import { registerCampaignTools } from "./tools/campaigns.js";
@@ -26,7 +32,7 @@ import { getAccessToken } from "./services/graph-api.js";
 
 const server = new McpServer({
   name: "meta-ads-mcp-server",
-  version: "1.0.0",
+  version: "1.1.0",
 });
 
 registerAccountTools(server);
@@ -39,7 +45,7 @@ registerMediaTools(server);
 registerActivityTools(server);
 registerPaginationTools(server);
 
-async function main(): Promise<void> {
+async function runStdio(): Promise<void> {
   try {
     getAccessToken();
   } catch (err) {
@@ -58,7 +64,50 @@ async function main(): Promise<void> {
   console.error("Meta Ads MCP server running via stdio");
 }
 
-main().catch((error: unknown) => {
-  console.error("Server startup error:", error);
-  process.exit(1);
-});
+async function runHTTP(): Promise<void> {
+  try {
+    getAccessToken();
+  } catch (err) {
+    console.error((err as Error).message);
+    console.error(
+      "Usage: TRANSPORT=http META_ADS_ACCESS_TOKEN=<token> node dist/index.js"
+    );
+    process.exit(1);
+  }
+
+  const app = express();
+  app.use(express.json());
+
+  app.post("/mcp", async (req, res) => {
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    res.on("close", () => transport.close());
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  });
+
+  // Health check endpoint
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", server: "meta-ads-mcp-server", version: "1.1.0" });
+  });
+
+  const port = parseInt(process.env.PORT ?? "3000", 10);
+  app.listen(port, () => {
+    console.error(`Meta Ads MCP server running on http://localhost:${port}/mcp`);
+  });
+}
+
+const transport = process.env.TRANSPORT ?? "stdio";
+if (transport === "http") {
+  runHTTP().catch((error: unknown) => {
+    console.error("Server startup error:", error);
+    process.exit(1);
+  });
+} else {
+  runStdio().catch((error: unknown) => {
+    console.error("Server startup error:", error);
+    process.exit(1);
+  });
+}
