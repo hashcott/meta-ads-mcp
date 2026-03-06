@@ -10,9 +10,15 @@
  *   node dist/index.js --access-token <YOUR_META_ACCESS_TOKEN>
  *   META_ADS_ACCESS_TOKEN=<token> node dist/index.js
  *
- * Usage (remote HTTP):
+ * Usage (remote HTTP without OAuth):
  *   TRANSPORT=http META_ADS_ACCESS_TOKEN=<token> node dist/index.js
- *   TRANSPORT=http META_ADS_ACCESS_TOKEN=<token> PORT=3000 node dist/index.js
+ *
+ * Usage (remote HTTP with Scalekit OAuth):
+ *   TRANSPORT=http OAUTH_ENABLED=true \
+ *     SCALEKIT_ENVIRONMENT_URL=https://<env>.scalekit.cloud \
+ *     SCALEKIT_CLIENT_ID=<id> SCALEKIT_CLIENT_SECRET=<secret> \
+ *     MCP_SERVER_URL=https://mcp.yourapp.com \
+ *     META_ADS_ACCESS_TOKEN=<token> node dist/index.js
  */
 
 import { createRequire } from "module";
@@ -33,6 +39,7 @@ import { registerMediaTools } from "./tools/media.js";
 import { registerActivityTools } from "./tools/activities.js";
 import { registerPaginationTools } from "./tools/pagination.js";
 import { getAccessToken } from "./services/graph-api.js";
+import { authMiddleware, buildResourceMetadata, getScopesSupported } from "./auth/scalekit.js";
 
 const server = new McpServer({
   name: "meta-ads-mcp-server",
@@ -79,8 +86,36 @@ async function runHTTP(): Promise<void> {
     process.exit(1);
   }
 
+  const oauthEnabled = process.env.OAUTH_ENABLED === "true";
+
   const app = express();
   app.use(express.json());
+
+  // OAuth 2.1 resource discovery (RFC 9728) — always public
+  app.get("/.well-known/oauth-protected-resource", (_req, res) => {
+    res.json(buildResourceMetadata());
+  });
+
+  // Health check — always public
+  app.get("/health", (_req, res) => {
+    res.json({
+      status: "ok",
+      server: "meta-ads-mcp-server",
+      version: "1.1.0",
+      oauth: oauthEnabled,
+      scopes: getScopesSupported(),
+    });
+  });
+
+  // Apply Scalekit JWT validation to all other routes when OAuth is enabled
+  if (oauthEnabled) {
+    app.use(authMiddleware);
+    console.error("OAuth 2.1 (Scalekit) authentication enabled");
+  } else {
+    console.error(
+      "OAuth disabled — set OAUTH_ENABLED=true to require Scalekit JWT validation"
+    );
+  }
 
   app.post("/mcp", async (req, res) => {
     const transport = new StreamableHTTPServerTransport({
